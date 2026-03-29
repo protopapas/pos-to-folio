@@ -130,11 +130,19 @@ async function fetchSales(from, to) {
 }
 
 /**
- * Format a Date to "YYYY-MM-DD HH:MM:SS" for Goodtill API
+ * Format a Date to "YYYY-MM-DD HH:MM:SS" in Cyprus local time for Goodtill API.
+ * Goodtill stores/returns timestamps in the property's local timezone (Europe/Nicosia).
+ * Using Intl so it works correctly regardless of the server's system timezone (e.g. UTC on Railway).
  */
 function formatDateTime(d) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Nicosia',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
 }
 
 /**

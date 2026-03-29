@@ -95,8 +95,8 @@ async function pollOnce() {
     if (store.has(saleId)) continue;
 
     try {
-      await processSale(sale, saleId);
-      successCount++;
+      const posted = await processSale(sale, saleId);
+      if (posted) successCount++;
     } catch (err) {
       errorCount++;
       console.error(`[bridge] Error processing sale ${saleId}:`, err.message);
@@ -143,7 +143,7 @@ async function processSale(sale, saleId) {
 
   if (!roomNumber) {
     console.warn(`[bridge] Sale ${saleId}: no room number found (no customer_id match and no customer name match), skipping`);
-    return;
+    return false;
   }
 
   // If we didn't get a reservation from the roster, look it up
@@ -151,14 +151,14 @@ async function processSale(sale, saleId) {
     const resourceId = roomMap.get(roomNumber);
     if (!resourceId) {
       console.error(`[bridge] Sale ${saleId}: room "${roomNumber}" not found in MEWS`);
-      return;
+      return false;
     }
     reservation = await getActiveReservationForRoom(resourceId);
   }
 
   if (!reservation) {
     console.error(`[bridge] Sale ${saleId}: no checked-in reservation found for room ${roomNumber}`);
-    return;
+    return false;
   }
 
   // 3. Build order items from the sale
@@ -168,7 +168,7 @@ async function processSale(sale, saleId) {
     const total = parseFloat(sale.sales_details?.total || sale.total || '0');
     if (total <= 0) {
       console.warn(`[bridge] Sale ${saleId}: zero or negative total, skipping`);
-      return;
+      return false;
     }
     items.push({ name: 'POS Charge', unitCount: 1, grossValue: total });
   }
@@ -194,6 +194,7 @@ async function processSale(sale, saleId) {
   const mewsOrderId = result?.OrderId || result?.Id;
   store.add(saleId, mewsOrderId);
   console.log(`[bridge] ✓ Sale ${saleRef} posted to MEWS (order ${mewsOrderId || 'ok'})`);
+  return true;
 }
 
 /**
