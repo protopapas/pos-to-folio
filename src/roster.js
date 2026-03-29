@@ -85,12 +85,26 @@ async function fullSync(roomMap, resourceToRoom) {
   );
   console.log(`[roster] Found ${managedCustomers.length} bridge-managed customers in Goodtill`);
 
-  // Build lookup by custom_field_1 (stores "mews:{reservationId}") and by room number
+  // Build lookup by room code — and deduplicate (delete extras from previous buggy syncs)
   const gtByRoom = new Map();
+  const duplicates = [];
   for (const c of managedCustomers) {
-    // Extract room number from name like "Room 101 — John Smith"
-    const match = c.name?.match(/^Room (\d+)/i);
-    if (match) gtByRoom.set(match[1], c);
+    const match = c.name?.match(/^Room (\S+)/i);
+    if (match) {
+      const room = match[1];
+      if (gtByRoom.has(room)) {
+        // Keep the one already in the map, queue this one for deletion
+        duplicates.push(c);
+      } else {
+        gtByRoom.set(room, c);
+      }
+    }
+  }
+  if (duplicates.length) {
+    console.log(`[roster] Cleaning up ${duplicates.length} duplicate customers...`);
+    for (const dup of duplicates) {
+      await deactivateCustomer(dup.id);
+    }
   }
 
   // 5. For each occupied room: create or activate Goodtill customer
