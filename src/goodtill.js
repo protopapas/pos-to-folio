@@ -114,11 +114,13 @@ async function deactivateCustomer(id) {
  * @returns {Promise<any[]>} Array of sale objects
  */
 async function fetchSales(from, to) {
+  const fromStr = from instanceof Date ? formatDateTime(from) : from;
+  const toStr = to instanceof Date ? formatDateTime(to) : to;
   const all = [];
   let offset = 0;
   const limit = 200;
   while (true) {
-    const page = await gt('/external/get_sales_details', { from, to, limit, offset });
+    const page = await gt('/external/get_sales_details', { from: fromStr, to: toStr, limit, offset });
     if (!page.data || !Array.isArray(page.data) || page.data.length === 0) break;
     all.push(...page.data);
     if (page.data.length < limit) break;
