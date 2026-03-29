@@ -77,11 +77,11 @@ async function getResourcesAndRoomMap() {
 
   const resources = data.Resources || [];
   const roomMap = new Map();
+  // Only include resources that look like room codes (letters + digits, e.g. DEM11, PET03)
+  const ROOM_PATTERN = /^[A-Za-z]+\d+$/;
   for (const r of resources) {
-    if (r.IsActive && r.Name) {
-      // Map by the resource name (which is typically the room number like "101")
+    if (r.IsActive && r.Name && ROOM_PATTERN.test(r.Name.trim())) {
       roomMap.set(r.Name.trim(), r.Id);
-      // Also try without leading zeros
       const num = r.Name.trim().replace(/^0+/, '');
       if (num !== r.Name.trim()) roomMap.set(num, r.Id);
     }
