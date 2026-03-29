@@ -131,14 +131,18 @@ async function processSale(sale, saleId) {
     }
   }
 
-  // Fallback: parse room number from customer_name (manual entry)
+  // Fallback: extract room code from the customer name (e.g. "Room DEM11 — Guest")
   if (!roomNumber) {
-    const raw = (sale.customer_name || sale.sales_details?.customer_name || sale.notes || '').trim();
-    roomNumber = parseRoomNumber(raw);
+    const custName = sale.customer?.name || sale.customer_name || sale.sales_details?.customer_name || '';
+    const match = custName.match(/^Room (\S+)/i);
+    if (match) {
+      roomNumber = match[1];
+      console.log(`[bridge] Sale ${saleId}: resolved room ${roomNumber} from customer name "${custName}"`);
+    }
   }
 
   if (!roomNumber) {
-    console.warn(`[bridge] Sale ${saleId}: no room number found (no customer_id match and no parseable room number), skipping`);
+    console.warn(`[bridge] Sale ${saleId}: no room number found (no customer_id match and no customer name match), skipping`);
     return;
   }
 
