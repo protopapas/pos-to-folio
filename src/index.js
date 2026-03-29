@@ -106,30 +106,39 @@ async function start() {
     process.exit(1);
   }
 
+  // Start the HTTP server FIRST so Railway sees a healthy process
+  app.listen(PORT, () => {
+    console.log(`[server] POS-to-Folio bridge running on port ${PORT}`);
+    console.log(`[server] Health:       GET  http://localhost:${PORT}/health`);
+    console.log(`[server] Manual poll:  POST http://localhost:${PORT}/poll`);
+    console.log(`[server] Manual sync:  POST http://localhost:${PORT}/sync`);
+    console.log(`[server] MEWS webhook: POST http://localhost:${PORT}/webhooks/mews`);
+  });
+
+  // Then attempt to initialise MEWS config + roster sync (non-fatal)
   try {
-    // init() loads MEWS config AND runs the first fullSync
     await init();
     startPolling();
-
-    // Periodic full re-sync as a safety net (every 10 minutes)
-    const resyncInterval = parseInt(process.env.ROSTER_RESYNC_INTERVAL_MS || '600000', 10);
-    resyncTimer = setInterval(() => {
-      fullSync(getRoomMap(), getResourceToRoom()).catch((err) =>
-        console.error('[server] Roster re-sync error:', err.message)
-      );
-    }, resyncInterval);
-
-    app.listen(PORT, () => {
-      console.log(`[server] POS-to-Folio bridge running on port ${PORT}`);
-      console.log(`[server] Health:       GET  http://localhost:${PORT}/health`);
-      console.log(`[server] Manual poll:  POST http://localhost:${PORT}/poll`);
-      console.log(`[server] Manual sync:  POST http://localhost:${PORT}/sync`);
-      console.log(`[server] MEWS webhook: POST http://localhost:${PORT}/webhooks/mews`);
-    });
+    console.log('[server] Bridge initialised and polling started');
   } catch (err) {
-    console.error('[server] Failed to start:', err);
-    process.exit(1);
+    console.error('[server] Init failed (will retry on next re-sync):', err.message);
   }
+
+  // Periodic full re-sync as a safety net (every 10 minutes)
+  const resyncInterval = parseInt(process.env.ROSTER_RESYNC_INTERVAL_MS || '600000', 10);
+  resyncTimer = setInterval(async () => {
+    try {
+      // If init hasn't completed, try again
+      if (!getRoomMap().size) {
+        console.log('[server] Re-attempting init...');
+        await init();
+        startPolling();
+      }
+      await fullSync(getRoomMap(), getResourceToRoom());
+    } catch (err) {
+      console.error('[server] Roster re-sync error:', err.message);
+    }
+  }, resyncInterval);
 }
 
 // ─── Graceful shutdown ────────────────────────────────────────────────
