@@ -154,30 +154,18 @@ function extractGuestFolioSales(sales) {
   for (const sale of sales) {
     if (sale.order_status !== 'COMPLETED') continue;
 
-    const payments = sale.sales_details?.sales_payments || [];
-    const isGuestFolio = payments.some((p) => {
-      const name = (p.payment_type_name || p.name || p.tender_type || '').toLowerCase();
-      const desc = (p.description || p.payment_type_description || '').toLowerCase();
-      return name === 'custom_1' || name.includes('guest folio') || name.includes('room charge') || desc.includes('guest folio');
+    // sales_payments is a top-level object keyed by payment type name
+    // e.g. { "CUSTOM_1": { payment_amount: "8.00", ... } }
+    const payments = sale.sales_payments || {};
+    const paymentKeys = Object.keys(payments);
+    const isGuestFolio = paymentKeys.some((key) => {
+      const k = key.toLowerCase();
+      return k === 'custom_1' || k.includes('guest folio') || k.includes('room charge');
     });
 
     if (!isGuestFolio) continue;
 
-    // Extract room number from customer name or the sale notes
-    const raw = (
-      sale.customer_name ||
-      sale.sales_details?.customer_name ||
-      sale.notes ||
-      ''
-    ).trim();
-
-    const roomNumber = parseRoomNumber(raw);
-    if (!roomNumber) {
-      console.warn(`[goodtill] Guest Folio sale ${sale.id} has no valid room number in customer name: "${raw}"`);
-      continue;
-    }
-
-    results.push({ sale, roomNumber });
+    results.push({ sale });
   }
 
   return results;
