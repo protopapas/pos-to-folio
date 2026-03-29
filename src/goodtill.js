@@ -157,7 +157,8 @@ function extractGuestFolioSales(sales) {
     const payments = sale.sales_details?.sales_payments || [];
     const isGuestFolio = payments.some((p) => {
       const name = (p.payment_type_name || p.name || p.tender_type || '').toLowerCase();
-      return name.includes('guest folio') || name.includes('room charge');
+      const desc = (p.description || p.payment_type_description || '').toLowerCase();
+      return name === 'custom_1' || name.includes('guest folio') || name.includes('room charge') || desc.includes('guest folio');
     });
 
     if (!isGuestFolio) continue;
