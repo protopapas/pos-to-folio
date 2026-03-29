@@ -107,8 +107,9 @@ async function start() {
   }
 
   // Start the HTTP server FIRST so Railway sees a healthy process
-  app.listen(PORT, () => {
-    console.log(`[server] POS-to-Folio bridge running on port ${PORT}`);
+  // Bind to 0.0.0.0 so Railway's proxy can reach the app
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[server] POS-to-Folio bridge running on 0.0.0.0:${PORT}`);
     console.log(`[server] Health:       GET  http://localhost:${PORT}/health`);
     console.log(`[server] Manual poll:  POST http://localhost:${PORT}/poll`);
     console.log(`[server] Manual sync:  POST http://localhost:${PORT}/sync`);
