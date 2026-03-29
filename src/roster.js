@@ -65,13 +65,17 @@ async function fullSync(roomMap, resourceToRoom) {
     }
   }
 
-  // 3. Get guest names for all reservations
+  // 3. Get guest names for all reservations (may fail if token lacks permission)
   const customerIds = [...new Set(reservations.map((r) => r.AccountId || r.CustomerId).filter(Boolean))];
-  const mewsCustomers = customerIds.length ? await getCustomers(customerIds) : [];
   const customerNameMap = new Map();
-  for (const c of mewsCustomers) {
-    const name = [c.FirstName, c.LastName].filter(Boolean).join(' ') || 'Guest';
-    customerNameMap.set(c.Id, name);
+  try {
+    const mewsCustomers = customerIds.length ? await getCustomers(customerIds) : [];
+    for (const c of mewsCustomers) {
+      const name = [c.FirstName, c.LastName].filter(Boolean).join(' ') || 'Guest';
+      customerNameMap.set(c.Id, name);
+    }
+  } catch (err) {
+    console.warn(`[roster] Could not fetch guest names from MEWS (${err.message}). Using "Guest" as fallback.`);
   }
 
   // 4. Get all existing bridge-managed customers from Goodtill
@@ -175,9 +179,13 @@ async function handleReservationUpdate(reservationId, roomMap, resourceToRoom) {
       const guestCustId = reservation.AccountId || reservation.CustomerId;
       let guestName = 'Guest';
       if (guestCustId) {
-        const guests = await getMewsCustomers([guestCustId]);
-        if (guests.length) {
-          guestName = [guests[0].FirstName, guests[0].LastName].filter(Boolean).join(' ') || 'Guest';
+        try {
+          const guests = await getMewsCustomers([guestCustId]);
+          if (guests.length) {
+            guestName = [guests[0].FirstName, guests[0].LastName].filter(Boolean).join(' ') || 'Guest';
+          }
+        } catch (err) {
+          console.warn(`[roster] Could not fetch guest name (${err.message}). Using "Guest".`);
         }
       }
 
