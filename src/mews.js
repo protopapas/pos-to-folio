@@ -72,7 +72,7 @@ async function getCustomers(customerIds) {
  */
 async function getResourcesAndRoomMap() {
   const data = await post('resources/getAll', {
-    Extent: { Resources: true, ResourceTypes: true, ResourceCategories: true },
+    Extent: { Resources: true },
   });
 
   const resources = data.Resources || [];
