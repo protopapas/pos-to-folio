@@ -209,7 +209,7 @@ function buildOrderItems(sale) {
   for (const item of saleItems) {
     const name = item.product_name || item.item_name || item.name || 'Item';
     const qty = parseInt(item.quantity || item.qty || '1', 10);
-    const price = parseFloat(item.total || item.price || item.amount || '0');
+    const price = parseFloat(item.line_total_after_discount || item.line_total_after_line_discount || item.total || item.price_inc_vat_per_item || item.price || item.amount || '0');
 
     if (price === 0) continue;
 
