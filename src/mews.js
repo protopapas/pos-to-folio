@@ -204,7 +204,7 @@ async function addOrder({ serviceId, accountId, reservationId, accountingCategor
     UnitAmount: {
       Currency: currency,
       GrossValue: item.grossValue,
-      TaxCodes: [process.env.MEWS_TAX_CODE || 'CY-2024-1-S'],
+      TaxCodes: [process.env.MEWS_TAX_CODE || 'CY-S'],
     },
     AccountingCategoryId: accountingCategoryId,
   }));
