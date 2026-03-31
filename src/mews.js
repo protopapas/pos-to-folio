@@ -198,13 +198,14 @@ async function findFBAccountingCategory() {
  * @param {string} [params.currency] - Currency code (default EUR)
  */
 async function addOrder({ serviceId, accountId, reservationId, accountingCategoryId, items, notes, consumptionUtc, currency = 'EUR' }) {
+  const defaultTaxCode = process.env.MEWS_TAX_CODE || 'CY-R';
   const mewsItems = items.map((item) => ({
     Name: item.name,
     UnitCount: item.unitCount,
     UnitAmount: {
       Currency: currency,
       GrossValue: item.grossValue,
-      TaxCodes: [process.env.MEWS_TAX_CODE || 'CY-R'],
+      TaxCodes: [item.taxCode || defaultTaxCode],
     },
     AccountingCategoryId: accountingCategoryId,
   }));

@@ -220,7 +220,38 @@ function buildOrderItems(sale) {
     });
   }
 
+  // Extract tips from metadata
+  const tipTotal = extractTipAmount(sale);
+  if (tipTotal > 0) {
+    items.push({
+      name: 'Tip',
+      unitCount: 1,
+      grossValue: tipTotal,
+      taxCode: 'CY-Z', // Tips are 0% VAT
+    });
+  }
+
   return items;
+}
+
+/**
+ * Extract total tip amount from a Goodtill sale's metadata
+ */
+function extractTipAmount(sale) {
+  try {
+    const metaStr = sale.sales_details?.metadata;
+    if (!metaStr) return 0;
+    const meta = typeof metaStr === 'string' ? JSON.parse(metaStr) : metaStr;
+    const tipsObj = meta.tips_obj;
+    if (!tipsObj || typeof tipsObj !== 'object') return 0;
+    let total = 0;
+    for (const tip of Object.values(tipsObj)) {
+      total += parseFloat(tip.amount || '0');
+    }
+    return total;
+  } catch {
+    return 0;
+  }
 }
 
 /**
