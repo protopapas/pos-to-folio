@@ -228,6 +228,7 @@ function buildOrderItems(sale) {
       unitCount: 1,
       grossValue: tipTotal,
       taxCode: 'CY-Z', // Tips are 0% VAT
+      accountingCategoryId: process.env.MEWS_TIPS_CATEGORY_ID || '88951db5-3deb-4e66-b108-b213013e2a08',
     });
   }
 

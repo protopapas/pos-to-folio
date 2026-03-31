@@ -207,7 +207,7 @@ async function addOrder({ serviceId, accountId, reservationId, accountingCategor
       GrossValue: item.grossValue,
       TaxCodes: [item.taxCode || defaultTaxCode],
     },
-    AccountingCategoryId: accountingCategoryId,
+    AccountingCategoryId: item.accountingCategoryId || accountingCategoryId,
   }));
 
   const body = {
