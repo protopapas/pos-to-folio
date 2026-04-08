@@ -111,7 +111,7 @@ async function fullSync(roomMap, resourceToRoom) {
   for (const [roomNumber, { reservation }] of occupiedRooms) {
     const guestCustId = reservation.AccountId || reservation.CustomerId;
     const guestName = customerNameMap.get(guestCustId) || 'Guest';
-    const displayName = `Room ${roomNumber} — ${guestName}`;
+    const displayName = `${roomNumber} — ${guestName}`;
     const mewsRef = `mews:${reservation.Id}`;
 
     const existing = gtByRoom.get(roomNumber);
@@ -203,7 +203,7 @@ async function handleReservationUpdate(reservationId, roomMap, resourceToRoom) {
         }
       }
 
-      const displayName = `Room ${roomNumber} — ${guestName}`;
+      const displayName = `${roomNumber} — ${guestName}`;
       const mewsRef = `mews:${reservation.Id}`;
       const existingId = roomCustomerMap.get(roomNumber);
 

@@ -56,6 +56,15 @@ class SalesStore {
   }
 
   /**
+   * Get the stored data for a sale
+   * @param {string} saleId
+   * @returns {{ postedAt: string, mewsOrderId?: string, reversedAt?: string } | undefined}
+   */
+  get(saleId) {
+    return this.processed.get(String(saleId));
+  }
+
+  /**
    * Mark a sale as successfully processed
    * @param {string} saleId
    * @param {string} [mewsOrderId]
@@ -66,6 +75,18 @@ class SalesStore {
       mewsOrderId,
     });
     this._save();
+  }
+
+  /**
+   * Mark a previously processed sale as reversed (voided)
+   * @param {string} saleId
+   */
+  markReversed(saleId) {
+    const entry = this.processed.get(String(saleId));
+    if (entry) {
+      entry.reversedAt = new Date().toISOString();
+      this._save();
+    }
   }
 
   /** Number of processed sales */

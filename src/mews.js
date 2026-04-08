@@ -223,6 +223,32 @@ async function addOrder({ serviceId, accountId, reservationId, accountingCategor
   return post('orders/add', body);
 }
 
+// ─── Order Items (for void/cancellation) ─────────────────────────────
+
+/**
+ * Fetch order items for given service order (order) IDs
+ * @param {string[]} serviceOrderIds - MEWS order IDs
+ * @returns {Promise<any[]>} Array of OrderItem objects
+ */
+async function getOrderItems(serviceOrderIds) {
+  if (!serviceOrderIds.length) return [];
+  const data = await post('orderItems/getAll', {
+    ServiceOrderIds: serviceOrderIds,
+    Limitation: { Count: 1000 },
+  });
+  return data.OrderItems || [];
+}
+
+/**
+ * Cancel (void) order items in MEWS
+ * @param {string[]} orderItemIds - IDs of order items to cancel
+ * @returns {Promise<any>}
+ */
+async function cancelOrderItems(orderItemIds) {
+  if (!orderItemIds.length) return;
+  return post('orderItems/cancel', { OrderItemIds: orderItemIds });
+}
+
 module.exports = {
   post,
   getAll,
@@ -233,4 +259,6 @@ module.exports = {
   findFBService,
   findFBAccountingCategory,
   addOrder,
+  getOrderItems,
+  cancelOrderItems,
 };

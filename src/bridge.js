@@ -10,8 +10,8 @@
  * 5. Post the order to MEWS linked to that reservation
  */
 
-const { fetchSales, formatDateTime, extractGuestFolioSales, parseRoomNumber } = require('./goodtill');
-const { getResourcesAndRoomMap, getActiveReservationForRoom, findFBService, findFBAccountingCategory, addOrder } = require('./mews');
+const { fetchSales, fetchSaleById, formatDateTime, extractGuestFolioSales, parseRoomNumber } = require('./goodtill');
+const { getResourcesAndRoomMap, getActiveReservationForRoom, findFBService, findFBAccountingCategory, addOrder, getOrderItems, cancelOrderItems } = require('./mews');
 const { SalesStore } = require('./store');
 const { fullSync, getRoomByCustomerId } = require('./roster');
 
@@ -89,9 +89,25 @@ async function pollOnce() {
 
   let successCount = 0;
   let errorCount = 0;
+  let reversedCount = 0;
 
-  for (const { sale } of guestFolioSales) {
+  for (const { sale, voided } of guestFolioSales) {
     const saleId = String(sale.id || sale.sale_id);
+
+    if (voided) {
+      // Check if this voided sale was previously posted to MEWS
+      const entry = store.get(saleId);
+      if (!entry || entry.reversedAt) continue; // not posted or already reversed
+      try {
+        const reversed = await reverseSale(sale, saleId, entry);
+        if (reversed) reversedCount++;
+      } catch (err) {
+        errorCount++;
+        console.error(`[bridge] Error reversing sale ${saleId}:`, err.message);
+      }
+      continue;
+    }
+
     if (store.has(saleId)) continue;
 
     try {
@@ -103,8 +119,8 @@ async function pollOnce() {
     }
   }
 
-  if (successCount || errorCount) {
-    console.log(`[bridge] Poll complete: ${successCount} posted, ${errorCount} errors`);
+  if (successCount || errorCount || reversedCount) {
+    console.log(`[bridge] Poll complete: ${successCount} posted, ${reversedCount} reversed, ${errorCount} errors`);
   }
 }
 
@@ -131,10 +147,10 @@ async function processSale(sale, saleId) {
     }
   }
 
-  // Fallback: extract room code from the customer name (e.g. "Room DEM11 — Guest")
+  // Fallback: extract room code from the customer name (e.g. "DEM11 — Guest" or legacy "Room DEM11 — Guest")
   if (!roomNumber) {
     const custName = sale.customer?.name || sale.customer_name || sale.sales_details?.customer_name || '';
-    const match = custName.match(/^Room (\S+)/i);
+    const match = custName.match(/^(?:Room\s+)?(\S+)\s*—/i);
     if (match) {
       roomNumber = match[1];
       console.log(`[bridge] Sale ${saleId}: resolved room ${roomNumber} from customer name "${custName}"`);
@@ -183,7 +199,7 @@ async function processSale(sale, saleId) {
     reservationId: reservation.Id,
     accountingCategoryId: fbAccountingCategoryId,
     items,
-    notes: `POS Sale #${saleRef} — Room ${roomNumber}`,
+    notes: `POS Sale #${saleRef} — ${roomNumber}`,
     consumptionUtc: sale.sales_date_time
       ? new Date(sale.sales_date_time).toISOString()
       : new Date().toISOString(),
@@ -194,6 +210,39 @@ async function processSale(sale, saleId) {
   const mewsOrderId = result?.OrderId || result?.Id;
   store.add(saleId, mewsOrderId);
   console.log(`[bridge] ✓ Sale ${saleRef} posted to MEWS (order ${mewsOrderId || 'ok'})`);
+  return true;
+}
+
+/**
+ * Reverse a voided sale by cancelling its order items in MEWS
+ * @param {any} sale - The Goodtill sale object (now voided)
+ * @param {string} saleId
+ * @param {{ mewsOrderId?: string }} entry - The store entry for this sale
+ */
+async function reverseSale(sale, saleId, entry) {
+  const saleRef = sale.receipt_no || sale.receipt_number || saleId;
+
+  if (!entry.mewsOrderId) {
+    console.warn(`[bridge] Sale ${saleRef} was voided but no MEWS order ID stored — cannot auto-reverse`);
+    return false;
+  }
+
+  console.log(`[bridge] Sale ${saleRef} voided on POS — cancelling MEWS order ${entry.mewsOrderId}`);
+
+  // Fetch order items for this order
+  const items = await getOrderItems([entry.mewsOrderId]);
+  const activeItems = items.filter((i) => !i.CanceledUtc);
+
+  if (activeItems.length === 0) {
+    console.log(`[bridge] Sale ${saleRef}: no active order items to cancel in MEWS`);
+    store.markReversed(saleId);
+    return true;
+  }
+
+  // Cancel all active items
+  await cancelOrderItems(activeItems.map((i) => i.Id));
+  store.markReversed(saleId);
+  console.log(`[bridge] ✓ Sale ${saleRef} reversed — cancelled ${activeItems.length} item(s) in MEWS`);
   return true;
 }
 
@@ -282,4 +331,68 @@ function stopPolling() {
   }
 }
 
-module.exports = { init, pollOnce, startPolling, stopPolling, getRoomMap, getResourceToRoom };
+// ─── Webhook handlers ────────────────────────────────────────────────
+
+/**
+ * Handle a sale.voided webhook from Goodtill.
+ * Fetches the sale, checks if it was posted to MEWS, and cancels the order items.
+ * @param {string} saleId - Goodtill sale ID
+ */
+async function handleVoidedSale(saleId) {
+  const entry = store.get(saleId);
+  if (!entry) {
+    console.log(`[bridge] Voided sale ${saleId} was not in store (not a guest folio or not yet posted), ignoring`);
+    return;
+  }
+  if (entry.reversedAt) {
+    console.log(`[bridge] Voided sale ${saleId} already reversed, ignoring`);
+    return;
+  }
+
+  // Fetch the sale to get the receipt number for logging
+  let saleRef = saleId;
+  try {
+    const sale = await fetchSaleById(saleId);
+    if (sale) saleRef = sale.receipt_no || sale.receipt_number || saleId;
+  } catch { /* use saleId as fallback ref */ }
+
+  await reverseSale({ receipt_no: saleRef }, saleId, entry);
+}
+
+/**
+ * Handle a sale.completed webhook from Goodtill.
+ * Fetches the sale details and processes it if it's a guest folio payment.
+ * @param {string} saleId - Goodtill sale ID
+ */
+async function handleCompletedSale(saleId) {
+  if (store.has(saleId)) {
+    console.log(`[bridge] Completed sale ${saleId} already processed, ignoring`);
+    return;
+  }
+
+  let sale;
+  try {
+    sale = await fetchSaleById(saleId);
+  } catch (err) {
+    console.error(`[bridge] Failed to fetch sale ${saleId}:`, err.message);
+    return;
+  }
+
+  if (!sale) {
+    console.warn(`[bridge] Sale ${saleId} not found in Goodtill`);
+    return;
+  }
+
+  // Check if it's a guest folio sale
+  const matches = extractGuestFolioSales([sale]);
+  if (matches.length === 0 || matches[0].voided) return;
+
+  console.log(`[bridge] Webhook: processing completed guest folio sale ${saleId}`);
+  try {
+    await processSale(sale, saleId);
+  } catch (err) {
+    console.error(`[bridge] Error processing webhook sale ${saleId}:`, err.message);
+  }
+}
+
+module.exports = { init, pollOnce, startPolling, stopPolling, getRoomMap, getResourceToRoom, handleVoidedSale, handleCompletedSale };

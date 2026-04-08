@@ -160,7 +160,8 @@ function extractGuestFolioSales(sales) {
   const results = [];
 
   for (const sale of sales) {
-    if (sale.order_status !== 'COMPLETED') continue;
+    const status = (sale.order_status || '').toUpperCase();
+    if (status !== 'COMPLETED' && status !== 'VOIDED') continue;
 
     // sales_payments is a top-level object keyed by payment type name
     // e.g. { "CUSTOM_1": { payment_amount: "8.00", ... } }
@@ -173,7 +174,7 @@ function extractGuestFolioSales(sales) {
 
     if (!isGuestFolio) continue;
 
-    results.push({ sale });
+    results.push({ sale, voided: status === 'VOIDED' });
   }
 
   return results;
@@ -192,8 +193,19 @@ function parseRoomNumber(str) {
   return match ? match[1] : null;
 }
 
+/**
+ * Fetch a single sale by ID
+ * @param {string} saleId
+ * @returns {Promise<any|null>} The sale object or null
+ */
+async function fetchSaleById(saleId) {
+  const data = await gt(`/external/get_sale_details/${saleId}`);
+  return data.data || null;
+}
+
 module.exports = {
   fetchSales,
+  fetchSaleById,
   formatDateTime,
   extractGuestFolioSales,
   parseRoomNumber,

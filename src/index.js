@@ -10,7 +10,7 @@
 require('dotenv').config();
 const crypto = require('node:crypto');
 const express = require('express');
-const { init, startPolling, stopPolling, pollOnce, getRoomMap, getResourceToRoom } = require('./bridge');
+const { init, startPolling, stopPolling, pollOnce, getRoomMap, getResourceToRoom, handleVoidedSale, handleCompletedSale } = require('./bridge');
 const { handleReservationUpdate, fullSync } = require('./roster');
 
 const app = express();
@@ -18,6 +18,7 @@ app.use(express.json());
 
 const PORT = parseInt(process.env.PORT || '3050', 10);
 const WEBHOOK_SECRET = process.env.MEWS_WEBHOOK_SECRET || '';
+const GOODTILL_WEBHOOK_TOKEN = process.env.GOODTILL_WEBHOOK_TOKEN || '';
 
 // ─── Health check ─────────────────────────────────────────────────────
 
@@ -88,6 +89,44 @@ app.post('/webhooks/mews', async (req, res) => {
   }
 });
 
+// ─── Goodtill Webhook ────────────────────────────────────────────────
+
+app.post('/webhooks/goodtill', async (req, res) => {
+  // Verify the request is from Goodtill
+  if (GOODTILL_WEBHOOK_TOKEN) {
+    const token = req.get('Goodtill-Verification-Token');
+    if (token !== GOODTILL_WEBHOOK_TOKEN) {
+      return res.status(401).send('Invalid token');
+    }
+  }
+
+  // Respond immediately — process asynchronously
+  res.status(200).send('OK');
+
+  const body = req.body || {};
+  const event = body.event;
+  if (!event || (!event.startsWith('sale.'))) return; // ignore non-sale events
+
+  // Sale ID is nested under data.sale.id
+  const id = body.data?.sale?.id;
+  if (!id) {
+    console.warn(`[goodtill-webhook] ${event} — no sale ID in payload:`, JSON.stringify(body.data));
+    return;
+  }
+
+  console.log(`[goodtill-webhook] Received ${event} for sale ${id}`);
+
+  try {
+    if (event === 'sale.voided') {
+      await handleVoidedSale(id);
+    } else if (event === 'sale.completed') {
+      await handleCompletedSale(id);
+    }
+  } catch (err) {
+    console.error(`[goodtill-webhook] Error handling ${event} for ${id}:`, err.message);
+  }
+});
+
 // ─── Startup ──────────────────────────────────────────────────────────
 
 let resyncTimer = null;
@@ -114,6 +153,7 @@ async function start() {
     console.log(`[server] Manual poll:  POST http://localhost:${PORT}/poll`);
     console.log(`[server] Manual sync:  POST http://localhost:${PORT}/sync`);
     console.log(`[server] MEWS webhook: POST http://localhost:${PORT}/webhooks/mews`);
+    console.log(`[server] Goodtill webhook: POST http://localhost:${PORT}/webhooks/goodtill`);
   });
 
   // Then attempt to initialise MEWS config + roster sync (non-fatal)

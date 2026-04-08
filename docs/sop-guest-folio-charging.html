@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOP — Guest Folio Charging via POS | The Agora Hotel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Poppins:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bronze: #AE764D;
+    --bronze-dark: #8E5F3C;
+    --bronze-light: #C4956E;
+    --bronze-50: #F9F1EA;
+    --cream: #FAF8EF;
+    --cream-dark: #F0EDE0;
+    --charcoal: #3E3E3F;
+    --charcoal-light: #5A5A5B;
+    --charcoal-dark: #2A2A2B;
+    --success: #5B8C5A;
+    --success-light: #EEF4EE;
+    --warning: #C49A3C;
+    --warning-light: #FBF6EA;
+    --danger: #B85C5C;
+    --danger-light: #F9EEEE;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Poppins', sans-serif;
+    color: var(--charcoal);
+    background: var(--cream);
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+    font-size: 14px;
+  }
+
+  .page {
+    max-width: 800px;
+    margin: 0 auto;
+    background: #fff;
+    min-height: 100vh;
+  }
+
+  .header {
+    background: var(--bronze-50);
+    border-bottom: 3px solid var(--bronze);
+    padding: 40px 50px 30px;
+    text-align: center;
+  }
+
+  .header img {
+    width: 180px;
+    margin-bottom: 24px;
+  }
+
+  .header h1 {
+    font-family: 'Marcellus SC', serif;
+    color: var(--bronze-dark);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
+  }
+
+  .header .subtitle {
+    color: var(--charcoal-light);
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .meta-bar {
+    display: flex;
+    justify-content: space-between;
+    background: var(--bronze-50);
+    border-bottom: 2px solid var(--bronze);
+    padding: 12px 50px;
+    font-size: 11px;
+    color: var(--charcoal-light);
+  }
+
+  .meta-bar span { font-weight: 500; color: var(--charcoal); }
+
+  .content { padding: 40px 50px 60px; }
+
+  h2 {
+    font-family: 'Marcellus SC', serif;
+    color: var(--bronze-dark);
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    margin: 36px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--cream-dark);
+  }
+
+  h2:first-child { margin-top: 0; }
+
+  h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--charcoal-dark);
+    margin: 20px 0 10px;
+  }
+
+  p { margin-bottom: 12px; }
+
+  ol, ul {
+    margin: 0 0 16px 20px;
+  }
+
+  ol li, ul li {
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+
+  .step-list { counter-reset: step; list-style: none; margin-left: 0; }
+  .step-list li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 44px;
+    margin-bottom: 16px;
+  }
+  .step-list li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 30px;
+    height: 30px;
+    background: var(--bronze);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .callout {
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+
+  .callout-warning {
+    background: var(--warning-light);
+    border-left: 4px solid var(--warning);
+  }
+
+  .callout-danger {
+    background: var(--danger-light);
+    border-left: 4px solid var(--danger);
+  }
+
+  .callout-success {
+    background: var(--success-light);
+    border-left: 4px solid var(--success);
+  }
+
+  .callout-info {
+    background: var(--bronze-50);
+    border-left: 4px solid var(--bronze);
+  }
+
+  .callout strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .badge {
+    display: inline-block;
+    background: var(--bronze);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .badge-foh { background: var(--bronze); }
+  .badge-reception { background: var(--charcoal-dark); }
+  .badge-manager { background: var(--danger); }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--cream-dark);
+    margin: 32px 0;
+  }
+
+  .footer {
+    background: var(--bronze-50);
+    border-top: 3px solid var(--bronze);
+    color: var(--charcoal-light);
+    text-align: center;
+    padding: 20px 50px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+
+  code {
+    background: var(--bronze-50);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--bronze-dark);
+  }
+
+  @media print {
+    body { background: #fff; font-size: 12px; }
+    .page { box-shadow: none; }
+    .header { padding: 30px 40px 20px; }
+    .content { padding: 30px 40px 40px; }
+    h2 { break-after: avoid; }
+    .callout { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <img src="../../agora-dashboard/public/logo.webp" alt="The Agora Hotel">
+    <h1>Standard Operating Procedure</h1>
+    <div class="subtitle">Guest Folio Charging via POS</div>
+  </div>
+
+  <div class="meta-bar">
+    <div>Department: <span>F&B / Reception</span></div>
+    <div>Effective: <span>7 April 2026</span></div>
+    <div>Version: <span>2.0</span></div>
+  </div>
+
+  <div class="content">
+
+    <h2>1. Purpose</h2>
+    <p>This document outlines the updated procedure for charging food &amp; beverage items to guest room folios using the SumUp POS system. Charges made on the POS are automatically posted to the guest's folio in MEWS. If a sale is voided on the POS, the charge is automatically removed from the guest's folio.</p>
+
+    <h2>2. Regular Guest Folio Charges</h2>
+    <p><span class="badge badge-foh">F&B Team</span> Follow these steps when a guest requests to charge to their room.</p>
+
+    <h3>Opening the Table</h3>
+    <ol class="step-list">
+      <li>As soon as you open the table, tap <strong>Assign Customer</strong> on the POS.</li>
+      <li>You will see a list of <strong>checked-in rooms only</strong>, displayed as:<br>
+        <code>PET02 — Terese Moe Leiner</code><br>
+        <code>PET05 — Hannah Hale</code><br>
+        If the guest's room is not listed, confirm with Reception that they are checked in.</li>
+      <li>Select the correct room and guest name.</li>
+    </ol>
+
+    <div class="callout callout-warning">
+      <strong>Room Number Format</strong>
+      Always use the trailing zero when searching for a room. For example, type <code>PET01</code> not <code>PET1</code>.
+    </div>
+
+    <h3>Ringing Up &amp; Closing the Sale</h3>
+    <ol class="step-list">
+      <li>Ring up all items on the POS as normal.</li>
+      <li>When the guest is ready to pay, <strong>print the bill</strong> and take it to the table for the guest to <strong>sign</strong>.</li>
+      <li>Back on the POS, tap <strong>Pay</strong>.</li>
+      <li>In <strong>Amount Tendered</strong>, enter the <strong>full amount including tips</strong>.</li>
+      <li>Press <strong>To Guest Folio</strong>.</li>
+      <li>The change shown is the tip amount — assign it as <strong>Tips</strong>.</li>
+      <li>The charge will be automatically posted to the guest's folio in MEWS within seconds.</li>
+    </ol>
+
+    <h3>After the Sale</h3>
+    <ol class="step-list">
+      <li>Take the signed bill to <strong>Reception</strong> to be filed with the guest's folio records.</li>
+    </ol>
+
+    <div class="callout callout-info">
+      <strong>Tip Reminder</strong>
+      Always add tips at the POS when closing the bill. If you forget, inform Reception so they can verify and correct it.
+    </div>
+
+    <hr class="divider">
+
+    <h2>3. Reception Verification</h2>
+    <p><span class="badge badge-reception">Reception</span> When receiving signed bills from the F&B team:</p>
+
+    <ol class="step-list">
+      <li>Check the signed bill against the charge that appeared on the guest's folio in MEWS.</li>
+      <li><strong>Verify tips:</strong> If the bill includes a tip, confirm that the waiter added it correctly on the POS. The tip should appear as a separate line item on the folio.</li>
+      <li>If the tip is missing or incorrect, <strong>add it manually</strong> to the guest's folio in MEWS.</li>
+      <li>File the signed bill in the guest's folio folder for record-keeping.</li>
+    </ol>
+
+    <hr class="divider">
+
+    <h2>4. Voiding a Transaction</h2>
+    <p><span class="badge badge-manager">Manager Only</span> If a charge was posted to a guest's folio in error:</p>
+
+    <div class="callout callout-danger">
+      <strong>Important</strong>
+      Do not attempt to remove or edit charges directly in MEWS. All corrections must be done through the SumUp backoffice by voiding the original sale. Go to <a href="https://pos.thegoodtill.com/app/sales/find_transaction" style="color: var(--bronze-dark);">pos.thegoodtill.com/app/sales/find_transaction</a> and enter the transaction number shown on the MEWS folio. The system will automatically remove the charge from the guest's folio.
+    </div>
+
+    <ol class="step-list">
+      <li>Identify the incorrect sale on SumUp POS.</li>
+      <li><strong>Escalate to a Manager</strong> — only managers are authorised to void transactions.</li>
+      <li>The manager will void the sale on the POS.</li>
+      <li>The charge will be <strong>automatically removed</strong> from the guest's folio in MEWS.</li>
+      <li>Verify in MEWS that the charge has been removed.</li>
+    </ol>
+
+    <hr class="divider">
+
+    <h2>5. Event &amp; Set Menu Charges</h2>
+    <p><span class="badge badge-foh">F&B Team</span> For events with pre-agreed set menu pricing, follow this adjusted process.</p>
+
+    <h3>Charging the Set Menu</h3>
+    <ol class="step-list">
+      <li>On the POS, select the appropriate set menu button:
+        <ul style="margin-top: 8px;">
+          <li><strong>Set Menu Breakfast</strong></li>
+          <li><strong>Set Menu Lunch</strong></li>
+          <li><strong>Set Menu Dinner</strong></li>
+        </ul>
+      </li>
+      <li>Enter the <strong>agreed price</strong> for the set menu.</li>
+      <li>Assign the correct number of <strong>covers</strong>.</li>
+      <li>Close the bill as <strong>Guest Folio</strong>.</li>
+    </ol>
+
+    <div class="callout callout-warning">
+      <strong>Do Not Assign a Room</strong>
+      For event set menus, do <strong>not</strong> assign the bill to a guest room. The event charge is handled separately. Assigning it to a room will result in a double charge on the guest's folio.
+    </div>
+
+    <h3>Handling Products Served in the Set Menu</h3>
+    <ol class="step-list">
+      <li>Individual products served as part of the set menu must be <strong>wasted</strong> on the POS for accurate stock tracking.</li>
+      <li>When wasting, select the reason: <code>Set Menu</code>.</li>
+    </ol>
+
+    <div class="callout callout-success">
+      <strong>Why We Waste Instead of Discount</strong>
+      Previously, products in set menus were given a 100% discount. We now waste them with reason "Set Menu" instead. This gives us accurate stock and waste reporting without distorting discount figures.
+    </div>
+
+    <hr class="divider">
+
+    <h2>6. Quick Reference</h2>
+    <table style="width:100%; border-collapse: collapse; font-size: 13px; margin-top: 12px;">
+      <thead>
+        <tr style="background: var(--bronze); color: #fff;">
+          <th style="padding: 10px 14px; text-align: left; font-weight: 500;">Scenario</th>
+          <th style="padding: 10px 14px; text-align: left; font-weight: 500;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background: #fff;">
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Guest wants to charge to room</td>
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Assign customer at table open &rarr; print bill &rarr; guest signs &rarr; Pay &rarr; full amount in Amount Tendered &rarr; To Guest Folio &rarr; assign change as tips &rarr; signed bill to Reception</td>
+        </tr>
+        <tr style="background: var(--cream);">
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Guest's room not showing on POS</td>
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Confirm with Reception that the guest is checked in</td>
+        </tr>
+        <tr style="background: #fff;">
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Tip missing on folio</td>
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Reception adds tip manually in MEWS</td>
+        </tr>
+        <tr style="background: var(--cream);">
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Wrong charge posted to folio</td>
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Escalate to Manager &rarr; void on POS &rarr; auto-removed from MEWS</td>
+        </tr>
+        <tr style="background: #fff;">
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Event set menu</td>
+          <td style="padding: 10px 14px; border-bottom: 1px solid var(--cream-dark);">Set Menu button &rarr; agreed price &rarr; covers &rarr; Guest Folio &rarr; <strong>no room assigned</strong></td>
+        </tr>
+        <tr style="background: var(--cream);">
+          <td style="padding: 10px 14px;">Products served in set menu</td>
+          <td style="padding: 10px 14px;">Waste with reason "Set Menu" (do not discount)</td>
+        </tr>
+      </tbody>
+    </table>
+
+  </div>
+
+  <div class="footer">
+    The Agora Hotel &middot; Pano Lefkara, Cyprus &middot; Internal Document &mdash; Not for Distribution
+  </div>
+
+</div>
+</body>
+</html>
