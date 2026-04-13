@@ -11,7 +11,7 @@
  */
 
 const { fetchSales, fetchSaleById, formatDateTime, extractGuestFolioSales, parseRoomNumber } = require('./goodtill');
-const { getResourcesAndRoomMap, getActiveReservationForRoom, findFBService, findFBAccountingCategory, addOrder, getOrderItems, cancelOrderItems } = require('./mews');
+const { getResourcesAndRoomMap, getActiveReservationForRoom, findFBService, findFBAccountingCategory, addOrder, addExternalPayment, deleteExternalPayments, getOrderItems, cancelOrderItems } = require('./mews');
 const { SalesStore } = require('./store');
 const { fullSync, getRoomByCustomerId } = require('./roster');
 
@@ -91,7 +91,7 @@ async function pollOnce() {
   let errorCount = 0;
   let reversedCount = 0;
 
-  for (const { sale, voided } of guestFolioSales) {
+  for (const { sale, voided, otherPayments } of guestFolioSales) {
     const saleId = String(sale.id || sale.sale_id);
 
     if (voided) {
@@ -111,7 +111,7 @@ async function pollOnce() {
     if (store.has(saleId)) continue;
 
     try {
-      const posted = await processSale(sale, saleId);
+      const posted = await processSale(sale, saleId, otherPayments);
       if (posted) successCount++;
     } catch (err) {
       errorCount++;
@@ -128,8 +128,9 @@ async function pollOnce() {
  * Process a single Guest Folio sale
  * @param {any} sale - The Goodtill sale object
  * @param {string} saleId
+ * @param {Array<{method: string, amount: number}>} [otherPayments] - Non-folio payments for split bills
  */
-async function processSale(sale, saleId) {
+async function processSale(sale, saleId, otherPayments = []) {
   // Primary: look up room from the sale's customer_id (roster-synced profile)
   const gtCustomerId = sale.customer_id;
   let roomNumber = null;
@@ -206,10 +207,34 @@ async function processSale(sale, saleId) {
     currency: process.env.CURRENCY || 'EUR',
   });
 
-  // 5. Mark as processed
+  // 5. Post external payments for non-folio portions (split bills)
   const mewsOrderId = result?.OrderId || result?.Id;
-  store.add(saleId, mewsOrderId);
-  console.log(`[bridge] ✓ Sale ${saleRef} posted to MEWS (order ${mewsOrderId || 'ok'})`);
+  const paymentIds = [];
+
+  if (otherPayments.length > 0) {
+    const accountId = reservation.AccountId || reservation.CustomerId;
+    for (const op of otherPayments) {
+      try {
+        const payResult = await addExternalPayment({
+          accountId,
+          amount: op.amount,
+          currency: process.env.CURRENCY || 'EUR',
+          type: 'Prepayment',
+          externalIdentifier: `pos-${saleRef}-${op.method.toLowerCase()}`,
+          notes: `${op.method} payment — POS Sale #${saleRef}`,
+        });
+        const paymentId = payResult?.PaymentId || payResult?.Id;
+        if (paymentId) paymentIds.push(paymentId);
+        console.log(`[bridge]   + Prepayment: €${op.amount.toFixed(2)} (${op.method})`);
+      } catch (err) {
+        console.error(`[bridge]   ✗ Failed to post ${op.method} prepayment for sale ${saleRef}:`, err.message);
+      }
+    }
+  }
+
+  // 6. Mark as processed
+  store.add(saleId, mewsOrderId, paymentIds);
+  console.log(`[bridge] ✓ Sale ${saleRef} posted to MEWS (order ${mewsOrderId || 'ok'}${paymentIds.length ? `, ${paymentIds.length} prepayment(s)` : ''})`);
   return true;
 }
 
@@ -241,6 +266,18 @@ async function reverseSale(sale, saleId, entry) {
 
   // Cancel all active items
   await cancelOrderItems(activeItems.map((i) => i.Id));
+
+  // Also reverse any external payments (split-bill prepayments)
+  const paymentIds = entry.paymentIds || [];
+  if (paymentIds.length > 0) {
+    try {
+      await deleteExternalPayments(paymentIds);
+      console.log(`[bridge]   Reversed ${paymentIds.length} external payment(s)`);
+    } catch (err) {
+      console.error(`[bridge]   Failed to reverse external payments for ${saleRef}:`, err.message);
+    }
+  }
+
   store.markReversed(saleId);
   console.log(`[bridge] ✓ Sale ${saleRef} reversed — cancelled ${activeItems.length} item(s) in MEWS`);
   return true;
@@ -389,7 +426,7 @@ async function handleCompletedSale(saleId) {
 
   console.log(`[bridge] Webhook: processing completed guest folio sale ${saleId}`);
   try {
-    await processSale(sale, saleId);
+    await processSale(sale, saleId, matches[0].otherPayments);
   } catch (err) {
     console.error(`[bridge] Error processing webhook sale ${saleId}:`, err.message);
   }

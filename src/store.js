@@ -15,7 +15,7 @@ class SalesStore {
    */
   constructor(filePath = DEFAULT_PATH) {
     this.filePath = filePath;
-    /** @type {Map<string, { postedAt: string, mewsOrderId?: string }>} */
+    /** @type {Map<string, { postedAt: string, mewsOrderId?: string, paymentIds?: string[] }>} */
     this.processed = new Map();
     this._load();
   }
@@ -58,7 +58,7 @@ class SalesStore {
   /**
    * Get the stored data for a sale
    * @param {string} saleId
-   * @returns {{ postedAt: string, mewsOrderId?: string, reversedAt?: string } | undefined}
+   * @returns {{ postedAt: string, mewsOrderId?: string, paymentIds?: string[], reversedAt?: string } | undefined}
    */
   get(saleId) {
     return this.processed.get(String(saleId));
@@ -68,12 +68,15 @@ class SalesStore {
    * Mark a sale as successfully processed
    * @param {string} saleId
    * @param {string} [mewsOrderId]
+   * @param {string[]} [paymentIds] - MEWS external payment IDs (for split-bill prepayments)
    */
-  add(saleId, mewsOrderId) {
-    this.processed.set(String(saleId), {
+  add(saleId, mewsOrderId, paymentIds = []) {
+    const entry = {
       postedAt: new Date().toISOString(),
       mewsOrderId,
-    });
+    };
+    if (paymentIds.length > 0) entry.paymentIds = paymentIds;
+    this.processed.set(String(saleId), entry);
     this._save();
   }
 

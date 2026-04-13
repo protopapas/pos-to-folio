@@ -164,17 +164,29 @@ function extractGuestFolioSales(sales) {
     if (status !== 'COMPLETED' && status !== 'VOIDED') continue;
 
     // sales_payments is a top-level object keyed by payment type name
-    // e.g. { "CUSTOM_1": { payment_amount: "8.00", ... } }
+    // e.g. { "CUSTOM_1": { payment_total: "8.00", ... } }
     const payments = sale.sales_payments || {};
     const paymentKeys = Object.keys(payments);
-    const isGuestFolio = paymentKeys.some((key) => {
+
+    const isFolioKey = (key) => {
       const k = key.toLowerCase();
       return k === 'custom_1' || k.includes('guest folio') || k.includes('room charge');
-    });
+    };
 
+    const isGuestFolio = paymentKeys.some(isFolioKey);
     if (!isGuestFolio) continue;
 
-    results.push({ sale, voided: status === 'VOIDED' });
+    // Collect non-folio payments (e.g. Card, Cash) for split-bill prepayment posting
+    const otherPayments = [];
+    for (const [key, p] of Object.entries(payments)) {
+      if (isFolioKey(key)) continue;
+      const amount = parseFloat(p.payment_total || p.payment_amount || '0');
+      if (amount > 0) {
+        otherPayments.push({ method: key, amount });
+      }
+    }
+
+    results.push({ sale, voided: status === 'VOIDED', otherPayments });
   }
 
   return results;

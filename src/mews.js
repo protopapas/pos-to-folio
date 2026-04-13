@@ -223,6 +223,43 @@ async function addOrder({ serviceId, accountId, reservationId, accountingCategor
   return post('orders/add', body);
 }
 
+// ─── External Payments (for split-bill prepayments) ─────────────────
+
+/**
+ * Post an external payment (prepayment) to a guest's account in MEWS.
+ * Used to offset non-Guest-Folio portions of split POS bills on the folio.
+ *
+ * @param {object} params
+ * @param {string} params.accountId - Customer/Account ID (from reservation)
+ * @param {number} params.amount - Payment amount (positive number)
+ * @param {string} [params.currency] - Currency code (default EUR)
+ * @param {string} [params.type] - Payment type (default Prepayment)
+ * @param {string} [params.externalIdentifier] - External reference ID
+ * @param {string} [params.notes] - Payment notes
+ */
+async function addExternalPayment({ accountId, amount, currency = 'EUR', type = 'Prepayment', externalIdentifier, notes }) {
+  const body = {
+    AccountId: accountId,
+    Amount: {
+      Currency: currency,
+      GrossValue: amount,
+    },
+    Type: type,
+    Notes: notes,
+  };
+  if (externalIdentifier) body.ExternalIdentifier = externalIdentifier;
+  return post('payments/addExternal', body);
+}
+
+/**
+ * Delete external payments in MEWS (for voided sale reversal)
+ * @param {string[]} paymentIds - IDs of payments to delete
+ */
+async function deleteExternalPayments(paymentIds) {
+  if (!paymentIds.length) return;
+  return post('payments/delete', { PaymentIds: paymentIds });
+}
+
 // ─── Order Items (for void/cancellation) ─────────────────────────────
 
 /**
@@ -259,6 +296,8 @@ module.exports = {
   findFBService,
   findFBAccountingCategory,
   addOrder,
+  addExternalPayment,
+  deleteExternalPayments,
   getOrderItems,
   cancelOrderItems,
 };
