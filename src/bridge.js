@@ -159,7 +159,8 @@ async function processSale(sale, saleId, otherPayments = []) {
   }
 
   if (!roomNumber) {
-    console.warn(`[bridge] Sale ${saleId}: no room number found (no customer_id match and no customer name match), skipping`);
+    const custName = sale.customer?.name || sale.customer_name || sale.sales_details?.customer_name || '';
+    console.warn(`[bridge] Sale ${saleId}: no room matched — customer_id="${gtCustomerId || 'null'}", customer_name="${custName}", skipping`);
     return false;
   }
 

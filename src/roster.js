@@ -230,12 +230,19 @@ async function handleReservationUpdate(reservationId, roomMap, resourceToRoom) {
         }
       }
     } else if (state === 'Processed' || state === 'Canceled' || state === 'Optional') {
-      // Check-out or cancellation: deactivate customer
+      // MEWS fires ServiceOrderUpdated for *any* reservation change, including old
+      // processed ones. Only deactivate when the map entry actually points to THIS
+      // reservation — otherwise we'd deactivate the current guest's customer whenever
+      // a prior checked-out reservation in the same room gets touched.
       const existingId = roomCustomerMap.get(roomNumber);
-      if (existingId) {
+      const mapped = existingId ? customerRoomMap.get(existingId) : null;
+      if (existingId && mapped?.reservationId === reservation.Id) {
         console.log(`[roster] Check-out room ${roomNumber}: deactivating customer`);
         await deactivateCustomer(existingId);
         customerRoomMap.delete(existingId);
+        roomCustomerMap.delete(roomNumber);
+      } else if (existingId) {
+        console.log(`[roster] Ignoring ${state} event for reservation ${reservation.Id} (room ${roomNumber}) — current occupant is a different reservation`);
       }
     }
   }
