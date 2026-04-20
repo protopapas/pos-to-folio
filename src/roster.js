@@ -89,7 +89,7 @@ async function fullSync(roomMap, resourceToRoom) {
   const gtByRoom = new Map();
   const duplicates = [];
   for (const c of managedCustomers) {
-    const match = c.name?.match(/^Room (\S+)/i);
+    const match = c.name?.match(/^(?:Room\s+)?(\S+)\s*—/i);
     if (match) {
       const room = match[1];
       if (gtByRoom.has(room)) {
