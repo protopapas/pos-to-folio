@@ -93,17 +93,19 @@ async function getResourcesAndRoomMap() {
 // ─── Reservations ─────────────────────────────────────────────────────
 
 /**
- * Get ALL currently checked-in reservations
+ * Get ALL currently checked-in reservations.
+ *
+ * `State: Started` is the only signal we trust — it means the guest is
+ * physically in the room. We deliberately do NOT filter by CollidingUtc:
+ * a late-checkout guest whose scheduled EndUtc has already passed is
+ * still Started (and still ordering) until ops actually checks them out.
+ * An earlier version filtered by CollidingUtc around `now` and returned
+ * an empty roster any time the sync ran after scheduled checkout time.
  * @returns {Promise<any[]>}
  */
 async function getAllCheckedInReservations() {
-  const now = new Date();
   return getAll('reservations/getAll/2023-06-06', {
     States: ['Started'],
-    CollidingUtc: {
-      StartUtc: now.toISOString(),
-      EndUtc: now.toISOString(),
-    },
     Extent: { Reservations: true },
   }, 'Reservations');
 }
