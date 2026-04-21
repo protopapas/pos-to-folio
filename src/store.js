@@ -96,6 +96,25 @@ class SalesStore {
   get size() {
     return this.processed.size;
   }
+
+  /**
+   * Return entries that are candidates for void-polling:
+   * posted within maxAgeMs, have a MEWS order ID, and aren't already reversed.
+   * @param {number} maxAgeMs - Max age of entries to return
+   * @returns {Array<[string, { postedAt: string, mewsOrderId: string, paymentIds?: string[] }]>}
+   */
+  getUnreversedCandidates(maxAgeMs) {
+    const cutoff = Date.now() - maxAgeMs;
+    const out = [];
+    for (const [id, entry] of this.processed) {
+      if (entry.reversedAt) continue;
+      if (!entry.mewsOrderId) continue;
+      const postedAt = Date.parse(entry.postedAt);
+      if (!Number.isFinite(postedAt) || postedAt < cutoff) continue;
+      out.push([id, entry]);
+    }
+    return out;
+  }
 }
 
 module.exports = { SalesStore };
