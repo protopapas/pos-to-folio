@@ -277,13 +277,17 @@ async function getOrderItems(serviceOrderIds) {
 }
 
 /**
- * Cancel (void) order items in MEWS
+ * Cancel (void) order items in MEWS.
+ * MEWS orderItems/cancel rejects requests with more than 10 items, so we batch.
  * @param {string[]} orderItemIds - IDs of order items to cancel
- * @returns {Promise<any>}
+ * @returns {Promise<void>}
  */
 async function cancelOrderItems(orderItemIds) {
   if (!orderItemIds.length) return;
-  return post('orderItems/cancel', { OrderItemIds: orderItemIds });
+  const BATCH = 10;
+  for (let i = 0; i < orderItemIds.length; i += BATCH) {
+    await post('orderItems/cancel', { OrderItemIds: orderItemIds.slice(i, i + BATCH) });
+  }
 }
 
 module.exports = {
