@@ -30,6 +30,11 @@ let pollTimer = null;
 
 // How far back to look on each poll cycle (in minutes)
 const LOOKBACK_MINUTES = parseInt(process.env.POLL_LOOKBACK_MINUTES || '30', 10);
+// How far back to check for voids (in hours) — posted sales within this window are re-queried each void-detection pass
+const VOID_DETECT_WINDOW_HOURS = parseInt(process.env.VOID_DETECT_WINDOW_HOURS || '48', 10);
+// Run void detection at most once every N ms (throttle, since it makes one API call per unreversed sale)
+const VOID_DETECT_INTERVAL_MS = parseInt(process.env.VOID_DETECT_INTERVAL_MS || String(5 * 60 * 1000), 10);
+let _lastVoidDetectAt = 0;
 
 /**
  * Initialise the bridge: load MEWS config (rooms, services, categories),
@@ -122,6 +127,67 @@ async function pollOnce() {
   if (successCount || errorCount || reversedCount) {
     console.log(`[bridge] Poll complete: ${successCount} posted, ${reversedCount} reversed, ${errorCount} errors`);
   }
+
+  // Void-detection fallback: Goodtill's /external/get_sales_details list endpoint
+  // only returns COMPLETED sales, so voids never appear in pollOnce above. And
+  // Goodtill's sale.voided webhook is unreliable — we've seen zero webhook
+  // deliveries despite subscribing. So we also poll each unreversed store entry
+  // individually and check its current order_status. Throttled to avoid hammering
+  // the Goodtill API.
+  if (Date.now() - _lastVoidDetectAt >= VOID_DETECT_INTERVAL_MS) {
+    _lastVoidDetectAt = Date.now();
+    try {
+      await detectVoids();
+    } catch (err) {
+      console.error('[bridge] Void detection error:', err.message);
+    }
+  }
+}
+
+/**
+ * Re-check every recently-posted sale in the store and reverse any that have
+ * since been voided on the POS. Idempotent — entries already marked reversedAt
+ * are filtered out by the store.
+ */
+async function detectVoids() {
+  const candidates = store.getUnreversedCandidates(VOID_DETECT_WINDOW_HOURS * 60 * 60 * 1000);
+  if (candidates.length === 0) return;
+
+  let reversed = 0;
+  let errors = 0;
+  for (const [saleId, entry] of candidates) {
+    let sale;
+    try {
+      sale = await fetchSaleById(saleId);
+    } catch (err) {
+      errors++;
+      console.error(`[bridge] void-detect: error fetching sale ${saleId}:`, err.message);
+      continue;
+    }
+
+    // Treat 404 (null) as a warning, not an auto-reversal — Goodtill occasionally
+    // returns transient 404s, and we don't want to cancel real charges on MEWS
+    // because of a flaky lookup. Log so ops can investigate.
+    if (!sale) {
+      console.warn(`[bridge] void-detect: sale ${saleId} returned 404 — possible void or hard-delete. Skipping auto-reverse.`);
+      continue;
+    }
+
+    const status = String(sale.order_status || '').toUpperCase();
+    if (status === 'VOIDED') {
+      try {
+        const ok = await reverseSale(sale, saleId, entry);
+        if (ok) reversed++;
+      } catch (err) {
+        errors++;
+        console.error(`[bridge] void-detect: error reversing sale ${saleId}:`, err.message);
+      }
+    }
+  }
+
+  if (reversed || errors) {
+    console.log(`[bridge] Void detection: checked ${candidates.length}, reversed ${reversed}, errors ${errors}`);
+  }
 }
 
 /**
@@ -182,12 +248,14 @@ async function processSale(sale, saleId, otherPayments = []) {
   // 3. Build order items from the sale
   const items = buildOrderItems(sale);
   if (items.length === 0) {
-    console.warn(`[bridge] Sale ${saleId}: no line items found, posting total as single item`);
-    const total = parseFloat(sale.sales_details?.total || sale.total || '0');
+    const total = parseFloat(
+      sale.sales_details?.total_after_discount ?? sale.sales_details?.total ?? sale.total ?? '0'
+    );
     if (total <= 0) {
-      console.warn(`[bridge] Sale ${saleId}: zero or negative total, skipping`);
+      console.warn(`[bridge] Sale ${saleId}: zero total after discount, skipping`);
       return false;
     }
+    console.warn(`[bridge] Sale ${saleId}: no line items found, posting total as single item`);
     items.push({ name: 'POS Charge', unitCount: 1, grossValue: total });
   }
 
@@ -296,9 +364,17 @@ function buildOrderItems(sale) {
   for (const item of saleItems) {
     const name = item.product_name || item.item_name || item.name || 'Item';
     const qty = parseInt(item.quantity || item.qty || '1', 10);
-    const price = parseFloat(item.line_total_after_discount || item.line_total_after_line_discount || item.total || item.price_inc_vat_per_item || item.price || item.amount || '0');
 
-    if (price === 0) continue;
+    // Prefer post-discount price. Use ?? so a legitimate 0 (fully discounted line)
+    // doesn't fall through to the pre-discount price — that would charge the guest
+    // the original amount instead of the discounted amount.
+    const postDiscountRaw = item.line_total_after_discount ?? item.line_total_after_line_discount;
+    const price = parseFloat(
+      postDiscountRaw ?? item.total ?? item.price_inc_vat_per_item ?? item.price ?? item.amount ?? '0'
+    );
+
+    // Skip zero lines, and round floating-point near-zero (e.g. -7e-15) to zero.
+    if (Math.abs(price) < 0.005) continue;
 
     items.push({
       name,

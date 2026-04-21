@@ -206,12 +206,26 @@ function parseRoomNumber(str) {
 }
 
 /**
- * Fetch a single sale by ID
+ * Fetch a single sale by ID.
+ *
+ * Uses /sales/<id> — NOT /external/get_sale_details/<id>. The "external"
+ * path only exists for the plural list endpoint; the singular /external
+ * form 404s, which silently broke webhook handlers until 2026-04-21.
+ *
+ * Returns null when the sale does not exist (404) so callers can distinguish
+ * "sale gone / hard-deleted" from "network/API error".
  * @param {string} saleId
- * @returns {Promise<any|null>} The sale object or null
+ * @returns {Promise<any|null>} The sale object, or null if not found
  */
 async function fetchSaleById(saleId) {
-  const data = await gt(`/external/get_sale_details/${saleId}`);
+  const token = await getToken();
+  const res = await fetch(`${BASE}/sales/${saleId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Goodtill sales/${saleId} failed: ${res.status} ${res.statusText}`);
+  const data = await res.json();
   return data.data || null;
 }
 
