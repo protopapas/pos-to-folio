@@ -109,26 +109,31 @@ async function getAllCheckedInReservations() {
 }
 
 /**
- * Find the active (checked-in) reservation for a given room resource ID
+ * Find the active (checked-in) reservation for a given room resource ID.
+ *
+ * `State: Started` means the guest is physically in the room — that's the
+ * only signal we trust. We deliberately do NOT filter by CollidingUtc: a
+ * late-checkout guest whose scheduled EndUtc has already passed is still
+ * Started (and still ordering drinks) until ops actually checks them out.
+ * An earlier version of this function filtered by CollidingUtc around `now`
+ * and missed charges during that late-checkout window.
+ *
  * @param {string} resourceId - MEWS resource ID
  * @returns {Promise<any|null>} The reservation or null
  */
 async function getActiveReservationForRoom(resourceId) {
-  const now = new Date();
   const reservations = await getAll('reservations/getAll/2023-06-06', {
     AssignedResourceIds: [resourceId],
     States: ['Started'],
-    CollidingUtc: {
-      StartUtc: now.toISOString(),
-      EndUtc: now.toISOString(),
-    },
   }, 'Reservations');
 
   if (reservations.length === 0) return null;
   if (reservations.length === 1) return reservations[0];
 
-  // Multiple started reservations for same room — pick the one closest to now
-  console.warn(`[mews] ${reservations.length} active reservations found for resource ${resourceId}, using most recent`);
+  // Multiple Started for the same room is a data anomaly (a room can only
+  // be physically occupied by one reservation at a time). Pick the one whose
+  // scheduled StartUtc is most recent as a best-effort tiebreak.
+  console.warn(`[mews] ${reservations.length} Started reservations found for resource ${resourceId}, using most recent`);
   reservations.sort((a, b) => new Date(b.StartUtc) - new Date(a.StartUtc));
   return reservations[0];
 }
