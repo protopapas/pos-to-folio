@@ -100,9 +100,14 @@ async function fullSync(roomMap, resourceToRoom) {
       }
     }
   }
-  if (duplicates.length) {
-    console.log(`[roster] Cleaning up ${duplicates.length} duplicate customers...`);
-    for (const dup of duplicates) {
+  // Only deactivate duplicates that are still active. Historical checked-out
+  // customers are already inactive — re-deactivating them on every sync makes
+  // thousands of pointless API calls and can stall the sync before steps 5/6
+  // run (so current guests never get pushed to Goodtill).
+  const toDeactivate = duplicates.filter((c) => c.active === 1 || c.active === true);
+  if (toDeactivate.length) {
+    console.log(`[roster] Cleaning up ${toDeactivate.length} duplicate customers (${duplicates.length - toDeactivate.length} already inactive, skipped)...`);
+    for (const dup of toDeactivate) {
       await deactivateCustomer(dup.id);
     }
   }
