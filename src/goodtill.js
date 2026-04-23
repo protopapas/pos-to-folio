@@ -180,17 +180,23 @@ function extractGuestFolioSales(sales) {
     const isGuestFolio = paymentKeys.some(isFolioKey);
     if (!isGuestFolio) continue;
 
-    // Collect non-folio payments (e.g. Card, Cash) for split-bill prepayment posting
+    // Sum folio-keyed payment amounts (what actually hits the room folio) and
+    // collect non-folio payments (Card/Cash) so the bridge can tell split bills
+    // from full-folio sales.
+    let folioAmount = 0;
     const otherPayments = [];
     for (const [key, p] of Object.entries(payments)) {
-      if (isFolioKey(key)) continue;
       const amount = parseFloat(p.payment_total || p.payment_amount || '0');
-      if (amount > 0) {
+      if (amount <= 0) continue;
+      if (isFolioKey(key)) {
+        folioAmount += amount;
+      } else {
         otherPayments.push({ method: key, amount });
       }
     }
+    folioAmount = Math.round(folioAmount * 100) / 100;
 
-    results.push({ sale, voided: status === 'VOIDED', otherPayments });
+    results.push({ sale, voided: status === 'VOIDED', folioAmount, otherPayments });
   }
 
   return results;

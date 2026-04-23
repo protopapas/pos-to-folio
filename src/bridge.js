@@ -11,7 +11,7 @@
  */
 
 const { fetchSales, fetchSaleById, formatDateTime, extractGuestFolioSales, parseRoomNumber } = require('./goodtill');
-const { getResourcesAndRoomMap, getActiveReservationForRoom, findFBService, findFBAccountingCategory, addOrder, addExternalPayment, deleteExternalPayments, getOrderItems, cancelOrderItems } = require('./mews');
+const { getResourcesAndRoomMap, getActiveReservationForRoom, findFBService, findFBAccountingCategory, addOrder, deleteExternalPayments, getOrderItems, cancelOrderItems } = require('./mews');
 const { SalesStore } = require('./store');
 const { fullSync, getRoomByCustomerId } = require('./roster');
 
@@ -96,7 +96,7 @@ async function pollOnce() {
   let errorCount = 0;
   let reversedCount = 0;
 
-  for (const { sale, voided, otherPayments } of guestFolioSales) {
+  for (const { sale, voided, folioAmount, otherPayments } of guestFolioSales) {
     const saleId = String(sale.id || sale.sale_id);
 
     if (voided) {
@@ -116,7 +116,7 @@ async function pollOnce() {
     if (store.has(saleId)) continue;
 
     try {
-      const posted = await processSale(sale, saleId, otherPayments);
+      const posted = await processSale(sale, saleId, folioAmount, otherPayments);
       if (posted) successCount++;
     } catch (err) {
       errorCount++;
@@ -194,9 +194,10 @@ async function detectVoids() {
  * Process a single Guest Folio sale
  * @param {any} sale - The Goodtill sale object
  * @param {string} saleId
- * @param {Array<{method: string, amount: number}>} [otherPayments] - Non-folio payments for split bills
+ * @param {number} folioAmount - Amount paid to Guest Folio (includes any folio-routed tips)
+ * @param {Array<{method: string, amount: number}>} [otherPayments] - Non-folio payments (Card/Cash)
  */
-async function processSale(sale, saleId, otherPayments = []) {
+async function processSale(sale, saleId, folioAmount, otherPayments = []) {
   // Primary: look up room from the sale's customer_id (roster-synced profile)
   const gtCustomerId = sale.customer_id;
   let roomNumber = null;
@@ -245,23 +246,64 @@ async function processSale(sale, saleId, otherPayments = []) {
     return false;
   }
 
-  // 3. Build order items from the sale
-  const items = buildOrderItems(sale);
-  if (items.length === 0) {
-    const total = parseFloat(
-      sale.sales_details?.total_after_discount ?? sale.sales_details?.total ?? sale.total ?? '0'
-    );
-    if (total <= 0) {
-      console.warn(`[bridge] Sale ${saleId}: zero total after discount, skipping`);
+  // 3. Build order items
+  //
+  // Split bill (Card + Guest Folio) posts ONLY the folio portion to MEWS —
+  // the Card is settled at POS and never touches MEWS. We construct the folio
+  // lines as food-portion + tip-portion (rather than a single summary line) so
+  // the Tips accounting category stays separate from F&B for reconciliation.
+  //
+  // Full-folio sales take the existing itemized path unchanged.
+  const saleRef = sale.receipt_no || sale.receipt_number || saleId;
+  const saleTotal = parseFloat(
+    sale.sales_details?.total_after_discount ?? sale.sales_details?.total ?? sale.total ?? '0'
+  );
+  const tipTotal = extractTipAmount(sale);
+  const isSplit = otherPayments.length > 0 || Math.abs(folioAmount - (saleTotal + tipTotal)) > 0.005;
+
+  let items;
+  if (isSplit) {
+    if (folioAmount <= 0) {
+      console.warn(`[bridge] Sale ${saleId}: split-bill folio amount is zero, skipping`);
       return false;
     }
-    console.warn(`[bridge] Sale ${saleId}: no line items found, posting total as single item`);
-    items.push({ name: 'POS Charge', unitCount: 1, grossValue: total });
+    // Heuristic: tips go to the folio first (true for the common case where
+    // the guest routes the tip to their room). If a future sale routes tip to
+    // card, the total folio amount is still correct — only the food-vs-tip
+    // split within the folio lines would be off.
+    const tipFolio = Math.min(tipTotal, folioAmount);
+    const foodFolio = Math.round((folioAmount - tipFolio) * 100) / 100;
+    items = [];
+    if (foodFolio >= 0.005) {
+      items.push({
+        name: `POS Sale #${saleRef} — Food/Drinks`,
+        unitCount: 1,
+        grossValue: foodFolio,
+      });
+    }
+    if (tipFolio >= 0.005) {
+      items.push({
+        name: 'Tip',
+        unitCount: 1,
+        grossValue: tipFolio,
+        taxCode: 'CY-Z',
+        accountingCategoryId: process.env.MEWS_TIPS_CATEGORY_ID || '88951db5-3deb-4e66-b108-b213013e2a08',
+      });
+    }
+  } else {
+    items = buildOrderItems(sale);
+    if (items.length === 0) {
+      if (saleTotal <= 0) {
+        console.warn(`[bridge] Sale ${saleId}: zero total after discount, skipping`);
+        return false;
+      }
+      console.warn(`[bridge] Sale ${saleId}: no line items found, posting total as single item`);
+      items.push({ name: 'POS Charge', unitCount: 1, grossValue: saleTotal });
+    }
   }
 
   // 4. Post to MEWS
-  const saleRef = sale.receipt_no || sale.receipt_number || saleId;
-  console.log(`[bridge] Posting sale ${saleRef} (room ${roomNumber}) to reservation ${reservation.Id}`);
+  console.log(`[bridge] Posting sale ${saleRef} (room ${roomNumber}${isSplit ? `, split — folio €${folioAmount.toFixed(2)}` : ''}) to reservation ${reservation.Id}`);
 
   const result = await addOrder({
     serviceId: fbServiceId,
@@ -276,34 +318,12 @@ async function processSale(sale, saleId, otherPayments = []) {
     currency: process.env.CURRENCY || 'EUR',
   });
 
-  // 5. Post external payments for non-folio portions (split bills)
   const mewsOrderId = result?.OrderId || result?.Id;
-  const paymentIds = [];
 
-  if (otherPayments.length > 0) {
-    const accountId = reservation.AccountId || reservation.CustomerId;
-    for (const op of otherPayments) {
-      try {
-        const payResult = await addExternalPayment({
-          accountId,
-          amount: op.amount,
-          currency: process.env.CURRENCY || 'EUR',
-          type: 'Prepayment',
-          externalIdentifier: `pos-${saleRef}-${op.method.toLowerCase()}`,
-          notes: `${op.method} payment — POS Sale #${saleRef}`,
-        });
-        const paymentId = payResult?.PaymentId || payResult?.Id;
-        if (paymentId) paymentIds.push(paymentId);
-        console.log(`[bridge]   + Prepayment: €${op.amount.toFixed(2)} (${op.method})`);
-      } catch (err) {
-        console.error(`[bridge]   ✗ Failed to post ${op.method} prepayment for sale ${saleRef}:`, err.message);
-      }
-    }
-  }
-
-  // 6. Mark as processed
-  store.add(saleId, mewsOrderId, paymentIds);
-  console.log(`[bridge] ✓ Sale ${saleRef} posted to MEWS (order ${mewsOrderId || 'ok'}${paymentIds.length ? `, ${paymentIds.length} prepayment(s)` : ''})`);
+  // 5. Mark as processed. paymentIds stays empty for new entries — kept in the
+  // store schema for back-compat with pre-fix entries that still have them.
+  store.add(saleId, mewsOrderId, []);
+  console.log(`[bridge] ✓ Sale ${saleRef} posted to MEWS (order ${mewsOrderId || 'ok'})`);
   return true;
 }
 
@@ -503,7 +523,7 @@ async function handleCompletedSale(saleId) {
 
   console.log(`[bridge] Webhook: processing completed guest folio sale ${saleId}`);
   try {
-    await processSale(sale, saleId, matches[0].otherPayments);
+    await processSale(sale, saleId, matches[0].folioAmount, matches[0].otherPayments);
   } catch (err) {
     console.error(`[bridge] Error processing webhook sale ${saleId}:`, err.message);
   }
