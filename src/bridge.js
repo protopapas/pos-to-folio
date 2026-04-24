@@ -212,7 +212,9 @@ async function detectVoids() {
  * Process a single Guest Folio sale
  * @param {any} sale - The Goodtill sale object
  * @param {string} saleId
- * @param {number} folioAmount - Amount paid to Guest Folio (includes any folio-routed tips)
+ * @param {number} folioAmount - Sum of folio-keyed entries in sale.sales_payments.
+ *   Excludes tips — Goodtill stores tips in sales_details.metadata.tips_obj, never as a
+ *   sales_payments line, so folioAmount is bill-only even when the tip is also folio-routed.
  * @param {Array<{method: string, amount: number}>} [otherPayments] - Non-folio payments (Card/Cash)
  */
 async function processSale(sale, saleId, folioAmount, otherPayments = []) {
@@ -277,7 +279,12 @@ async function processSale(sale, saleId, folioAmount, otherPayments = []) {
     sale.sales_details?.total_after_discount ?? sale.sales_details?.total ?? sale.total ?? '0'
   );
   const tipTotal = extractTipAmount(sale);
-  const isSplit = otherPayments.length > 0 || Math.abs(folioAmount - (saleTotal + tipTotal)) > 0.005;
+  // A sale is a split only when there's a non-folio payment (Card/Cash) on the
+  // sales_payments list. Don't trigger split on a folioAmount/saleTotal
+  // mismatch: tips are in tips_obj metadata and never appear in sales_payments,
+  // so a full-folio bill with a folio-routed tip always has that mismatch and
+  // would be wrongly carved up (sale #1777054624155 posted €71+€7 instead of €78+€7).
+  const isSplit = otherPayments.length > 0;
 
   let items;
   if (isSplit) {
