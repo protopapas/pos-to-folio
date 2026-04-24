@@ -142,8 +142,6 @@ async function pollOnce() {
       console.error('[bridge] Void detection error:', err.message);
     }
   }
-
-  await pushHeartbeat('up', `${guestFolioSales.length} folio sales; ${successCount} posted, ${reversedCount} reversed, ${errorCount} errors`);
 }
 
 /**
@@ -466,12 +464,20 @@ function startPolling(intervalMs) {
   const interval = intervalMs || parseInt(process.env.POLL_INTERVAL_MS || '60000', 10);
   console.log(`[bridge] Starting poll loop every ${interval / 1000}s`);
 
-  // Run first poll immediately
-  pollOnce().catch((err) => console.error('[bridge] Initial poll error:', err.message));
+  // Heartbeat fires every tick regardless of pollOnce outcome — the push
+  // monitor signals "polling loop is alive", not "external APIs worked".
+  // Goodtill/MEWS outages are covered by their own HTTP health checks.
+  const tick = async () => {
+    try {
+      await pollOnce();
+    } catch (err) {
+      console.error('[bridge] Poll error:', err.message);
+    }
+    await pushHeartbeat('up', 'tick');
+  };
 
-  pollTimer = setInterval(() => {
-    pollOnce().catch((err) => console.error('[bridge] Poll error:', err.message));
-  }, interval);
+  tick();
+  pollTimer = setInterval(tick, interval);
 }
 
 /**
