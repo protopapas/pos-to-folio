@@ -239,6 +239,24 @@ async function fetchSaleById(saleId) {
   return data.data || null;
 }
 
+/**
+ * Cheapest possible Goodtill health probe — hits /login and discards the token.
+ * Proves API is reachable AND credentials are valid, without pulling any data.
+ */
+async function ping() {
+  const res = await fetch(`${BASE}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subdomain: process.env.GOODTILL_SUBDOMAIN,
+      username: process.env.GOODTILL_USERNAME,
+      password: process.env.GOODTILL_PASSWORD,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`Goodtill login failed: ${res.status} ${res.statusText}`);
+}
+
 module.exports = {
   fetchSales,
   fetchSaleById,
@@ -250,4 +268,5 @@ module.exports = {
   updateCustomer,
   activateCustomer,
   deactivateCustomer,
+  ping,
 };
