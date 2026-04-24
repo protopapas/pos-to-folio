@@ -142,6 +142,26 @@ async function pollOnce() {
       console.error('[bridge] Void detection error:', err.message);
     }
   }
+
+  await pushHeartbeat('up', `${guestFolioSales.length} folio sales; ${successCount} posted, ${reversedCount} reversed, ${errorCount} errors`);
+}
+
+/**
+ * Ping Uptime Kuma's push monitor to signal a successful poll cycle.
+ * Uses UPTIME_KUMA_PUSH_URL env var — silent no-op if unset.
+ * Failures never throw — a monitoring hiccup must not break the bridge.
+ */
+async function pushHeartbeat(status, msg) {
+  const url = process.env.UPTIME_KUMA_PUSH_URL;
+  if (!url) return;
+  try {
+    const u = new URL(url);
+    u.searchParams.set('status', status);
+    u.searchParams.set('msg', msg);
+    await fetch(u, { signal: AbortSignal.timeout(5000) });
+  } catch (err) {
+    console.warn('[bridge] push heartbeat failed:', err.message);
+  }
 }
 
 /**

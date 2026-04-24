@@ -13,6 +13,7 @@ const express = require('express');
 const { init, startPolling, stopPolling, pollOnce, getRoomMap, getResourceToRoom, handleVoidedSale, handleCompletedSale } = require('./bridge');
 const { handleReservationUpdate, fullSync } = require('./roster');
 const { post: mewsPost } = require('./mews');
+const { listCustomers } = require('./goodtill');
 
 const app = express();
 app.use(express.json());
@@ -33,6 +34,15 @@ app.get('/health/mews', async (_req, res) => {
     res.json({ status: 'ok', mews: 'ok', enterprise: data?.Enterprise?.Name || null });
   } catch (err) {
     res.status(503).json({ status: 'error', mews: 'error', message: err.message });
+  }
+});
+
+app.get('/health/goodtill', async (_req, res) => {
+  try {
+    const customers = await listCustomers();
+    res.json({ status: 'ok', goodtill: 'ok', customerCount: customers.length });
+  } catch (err) {
+    res.status(503).json({ status: 'error', goodtill: 'error', message: err.message });
   }
 });
 
