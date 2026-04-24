@@ -12,6 +12,7 @@ const crypto = require('node:crypto');
 const express = require('express');
 const { init, startPolling, stopPolling, pollOnce, getRoomMap, getResourceToRoom, handleVoidedSale, handleCompletedSale } = require('./bridge');
 const { handleReservationUpdate, fullSync } = require('./roster');
+const { post: mewsPost } = require('./mews');
 
 const app = express();
 app.use(express.json());
@@ -24,6 +25,15 @@ const GOODTILL_WEBHOOK_TOKEN = process.env.GOODTILL_WEBHOOK_TOKEN || '';
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.get('/health/mews', async (_req, res) => {
+  try {
+    const data = await mewsPost('configuration/get');
+    res.json({ status: 'ok', mews: 'ok', enterprise: data?.Enterprise?.Name || null });
+  } catch (err) {
+    res.status(503).json({ status: 'error', mews: 'error', message: err.message });
+  }
 });
 
 // ─── Manual triggers ──────────────────────────────────────────────────
